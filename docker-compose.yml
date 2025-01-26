@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    image: elyza-tasks-100:latest
+    volumes:
+      - .:/app
+    #   - model-cache:/home/appuser/.cache/huggingface
+    env_file:
+      - .env
+    command: poetry run python src/main.py
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
