@@ -24,7 +24,6 @@ WORKDIR /app
 
 ENV PATH="/home/appuser/.local/bin:$PATH"
 RUN curl -sSL https://install.python-poetry.org | python -
-    # poetry config virtualenvs.create false
 
 COPY --chown=appuser:appuser pyproject.toml poetry.lock* ./
 RUN poetry install --no-root

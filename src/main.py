@@ -12,7 +12,7 @@ from tenacity import (
 from openai import AsyncOpenAI
 
 from util import load_prompt
-from prediction import pred
+from prediction import predict
 
 
 OUTPUT_DIR = Path("output")
@@ -114,7 +114,7 @@ def inference(model_name: str) -> list[dict[str, str]]:
     model, tokenizer = load_model_and_tokenizer(model_name)
     results = []
     for example in dataset["test"]:
-        prediction = pred(example, model, tokenizer)
+        prediction = predict(example, model, tokenizer)
         results.append({**example, model_name: prediction})
     print("Processing complete")
     return results
@@ -152,5 +152,6 @@ if __name__ == "__main__":
     parser.add_argument("--model", "-m", type=str, required=True)
     parser.add_argument("--judge_model", "-j", type=str, default="gpt-4o")
     args = parser.parse_args()
+
     import asyncio
     asyncio.run(main(args.model, args.judge_model))

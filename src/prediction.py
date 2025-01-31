@@ -1,9 +1,8 @@
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from util import load_prompt
 
 
-def pred(example: dict[str, str], model: AutoModelForCausalLM, tokenizer: AutoTokenizer) -> str:
+def predict(example: dict[str, str], model: AutoModelForCausalLM, tokenizer: AutoTokenizer) -> str:
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": example["input"]},
@@ -13,8 +12,6 @@ def pred(example: dict[str, str], model: AutoModelForCausalLM, tokenizer: AutoTo
         tokenize=False,
         add_generation_prompt=True,
     )
-    # prompt += "<|im_start|>assistant\n"
-    print(prompt)
     token_ids = tokenizer.encode(
         prompt, add_special_tokens=False, return_tensors="pt"
     )
@@ -28,6 +25,5 @@ def pred(example: dict[str, str], model: AutoModelForCausalLM, tokenizer: AutoTo
     output = tokenizer.decode(
         output_ids.tolist()[0][token_ids.size(1) :], skip_special_tokens=True
     )
-    print(output[:100])
     return output
 

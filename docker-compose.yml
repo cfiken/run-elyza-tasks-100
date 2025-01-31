@@ -5,8 +5,7 @@ services:
     build: .
     image: elyza-tasks-100:latest
     volumes:
-      - .:/app
-    #   - model-cache:/home/appuser/.cache/huggingface
+      - ./output:/app/output
     env_file:
       - .env
     command: poetry run python src/main.py
