@@ -1,7 +1,4 @@
-import os
 import json
-from openai import AsyncOpenAI
-
 
 from util import load_prompt
 from api_client import openai_completion
@@ -55,13 +52,8 @@ async def gpt4eval(
         eval_aspect=eval_aspect,
     )
     response = await openai_completion(
-        client=client,
-        model=judge_model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-        frequency_penalty=0,
-        presence_penalty=0,
-        response_format={"type": "json_object"},
+        judge_model=judge_model,
+        prompt=prompt,
     )
     try:
         gpt4score = json.loads(response.choices[0].message.content)["score"]
