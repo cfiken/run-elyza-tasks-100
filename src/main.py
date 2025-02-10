@@ -1,52 +1,33 @@
 from pathlib import Path
 import logging
+import time
 import pandas as pd
 
 from datasets import load_dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from predict import predict
 from evaluate import gpt4eval
+from util import get_logger
 
 OUTPUT_DIR = Path("output")
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 SYSTEM_PROMPT = "あなたは誠実で優秀な日本人のアシスタントです。"
 
 
-def load_model_and_tokenizer(model_name: str) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
-    """Load model and tokenizer.
-
-    Args:
-        model_name (str): Model name.
-    Returns:
-        tuple: Model and tokenizer.
-    """
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        device_map="auto",
-        torch_dtype="auto"
-    )
-    model.eval()
-    return model, tokenizer
-
-
-def inference(model_name: str) -> list[dict[str, str]]:
+def inference(model_name: str, fast: bool) -> list[dict[str, str]]:
     """Run model inference on ELYZA tasks 100 dataset and evaluate the outputs via LLM as a judge."""
     dataset = load_dataset("elyza/ELYZA-tasks-100", revision="1.0.0")
-    model, tokenizer = load_model_and_tokenizer(model_name)
-    results = []
-    for example in dataset["test"]:
-        prediction = predict(example["input"], SYSTEM_PROMPT, model, tokenizer)
-        results.append({**example, model_name: prediction})
-    LOGGER.info("Processing complete")
+    LOGGER.info("Start inference.")
+    start = time.time()
+    results = predict(dataset, SYSTEM_PROMPT, model_name, fast)
+    LOGGER.info(f"Inference complete. Time: {time.time() - start / 60:.2f} minutes")
     return results
 
 
-async def run(model_name: str, judge_model: str):
-    """Run ELYZA tasks 100."""
-    predictions = inference(model_name)
-    df = pd.DataFrame(predictions)
+async def evaluate(df: pd.DataFrame, model_name: str, judge_model: str) -> list[float]:
+    """Evaluate the model."""
+    LOGGER.info("Start evaluation.")
+    start = time.time()
     scores = []
     for _, row in df.iterrows():
         input_text = row["input"]
@@ -55,15 +36,24 @@ async def run(model_name: str, judge_model: str):
         pred = row[model_name]
         score = await gpt4eval(pred, input_text, output_text, eval_aspect, judge_model)
         scores.append(score)
+    LOGGER.info(f"Evaluation complete. Time: {time.time() - start / 60:.2f} minutes")
+    return scores
+
+
+async def run(model_name: str, judge_model: str, fast: bool):
+    """Run ELYZA tasks 100."""
+    predictions = inference(model_name, fast)
+    df = pd.DataFrame(predictions)
+    scores = await evaluate(df, model_name, judge_model)
     df["score"] = scores
     path = OUTPUT_DIR / f"{model_name.split('/')[-1]}_{judge_model}.csv"
     df.to_csv(path, index=False)
+    LOGGER.info(f"Results have been saved successfully. Path: {path}")
 
-
-async def main(model_name: str, judge_model: str):
+async def main(model_name: str, judge_model: str, fast: bool):
     """Main function to run ELYZA tasks 100."""
     try:
-        await run(model_name, judge_model)
+        await run(model_name, judge_model, fast)
         LOGGER.info("Results have been saved successfully.")
     except Exception as e:
         LOGGER.error(f"Error occurred: {e}")
@@ -75,7 +65,8 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--model", "-m", type=str, required=True)
     parser.add_argument("--judge_model", "-j", type=str, default="gpt-4o")
+    parser.add_argument("--fast", action="store_true")
     args = parser.parse_args()
 
     import asyncio
-    asyncio.run(main(args.model, args.judge_model))
+    asyncio.run(main(args.model, args.judge_model, args.fast))

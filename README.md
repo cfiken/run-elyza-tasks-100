@@ -18,6 +18,7 @@ vi .env # set OPENAI_API_KEY
 Build docker image and run.
 
 ```sh
+$ mkdir output && chmod 777 output
 $ docker compose build
 $ docker compose run --rm app poetry run python src/main.py --model abeja/ABEJA-Qwen2.5-32b-Japanese-v0.1 --judge_model gpt-4o
 ```
@@ -29,7 +30,8 @@ Then, you can find the results in `output` directory.
 Run with dockerhub image.
 
 ```sh
-docker run -v .:/app/output cfiken/elyza-tasks-100:latest poetry run python src/main.py --model abeja/ABEJA-Qwen2.5-32b-Japanese-v0.1 --judge_model gpt-4o
+$ mkdir output && chmod 777 output
+$ docker run -v $(pwd)/output:/app/output cfiken/elyza-tasks-100:latest poetry run python src/main.py --model abeja/ABEJA-Qwen2.5-32b-Japanese-v0.1 --judge_model gpt-4o
 ```
 
 Then, you can find the results in current or mounted directory.
