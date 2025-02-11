@@ -15,11 +15,13 @@ cp .env.example .env
 vi .env # set OPENAI_API_KEY
 ```
 
-Build docker image and run.
+Build docker image. 
+Create the output directory.
+Run with volume mount.
 
 ```sh
-$ mkdir output && chmod 777 output
 $ docker compose build
+$ mkdir output && chmod 777 output
 $ docker compose run --rm app poetry run python src/main.py --model abeja/ABEJA-Qwen2.5-32b-Japanese-v0.1 --judge_model gpt-4o
 ```
 

@@ -1,9 +1,12 @@
+import pandas as pd
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from vllm import LLM, SamplingParams
-from datasets import Dataset
 
-def load_model_and_tokenizer(model_name: str, fast: bool) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
+BATCH_SIZE = 1
+
+
+def load_model_and_tokenizer(model_name: str, fast: bool) -> tuple[AutoModelForCausalLM | LLM, AutoTokenizer]:
     """Load model and tokenizer.
 
     Args:
@@ -13,62 +16,82 @@ def load_model_and_tokenizer(model_name: str, fast: bool) -> tuple[AutoModelForC
     """
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if fast:
-        model = LLM(model=model_name, tokenizer=tokenizer)
+        model = LLM(
+            model=model_name,
+            tensor_parallel_size=4,
+            dtype="auto",
+            gpu_memory_utilization=0.8
+        )
     else:
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
             device_map="auto",
             torch_dtype="auto"
         )
-    model.eval()
+        model.eval()
     return model, tokenizer
 
 
 def predict(
-    dataset: Dataset,
+    df: pd.DataFrame,
     system_prompt: str,
     model_name: str,
     fast: bool,
 ) -> str:
     model, tokenizer = load_model_and_tokenizer(model_name, fast)
-    results = []
-    for example in dataset["test"]:
-        prompt = prepare_message(example["input"], system_prompt, tokenizer)
-        if fast:
-            output = _predict_vllm(prompt, model)
-        else:
-            output = _predict_huggingface(prompt, model, tokenizer)
-        results.append({**example, model_name: output})
+    if fast:
+        results = _predict_vllm(df, system_prompt, model, model_name)
+    else:
+        results = _predict_huggingface(df, system_prompt, model, model_name, tokenizer)
     return results
 
 
 def _predict_huggingface(
-    prompt: str,
+    df: pd.DataFrame,
+    system_prompt: str,
     model: AutoModelForCausalLM,
+    model_name: str,
     tokenizer: AutoTokenizer,
 ) -> str:
-    token_ids = tokenizer.encode(
-        prompt, add_special_tokens=False, return_tensors="pt"
-    )
-    with torch.no_grad():
-        output_ids = model.generate(
-            token_ids.to(model.device),
-            max_new_tokens=1200,
-            pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=tokenizer.eos_token_id,
+    results = []
+    for _, row in df.iterrows():
+        prompt = prepare_message(row["input"] + "\n\n" + row["context"], system_prompt, tokenizer)
+        token_ids = tokenizer.encode(
+            prompt, add_special_tokens=False, return_tensors="pt"
         )
-    output = tokenizer.decode(
-        output_ids.tolist()[0][token_ids.size(1) :], skip_special_tokens=True
-    )
-    return output
+        with torch.no_grad():
+            output_ids = model.generate(
+                token_ids.to(model.device),
+                max_new_tokens=1200,
+                pad_token_id=tokenizer.pad_token_id,
+                eos_token_id=tokenizer.eos_token_id,
+            )
+        output = tokenizer.decode(
+            output_ids.tolist()[0][token_ids.size(1) :], skip_special_tokens=True
+        )
+        results.append({**row, model_name: output})
+    return results
 
 
 def _predict_vllm(
-    prompt: str,
+    df: pd.DataFrame,
+    system_prompt: str,
     model: LLM,
+    model_name: str,
+    tokenizer: AutoTokenizer,
+    batch_size: int = BATCH_SIZE,
 ) -> str:
     sampling_params = SamplingParams(temperature=0.8)
-    return model.generate(prompt, sampling_params)
+    results = []
+    for i in range(0, len(df), batch_size):
+        batch_inputs = df[i:i + batch_size]
+        batch_prompts = [
+            prepare_message(row["input"], system_prompt, tokenizer)
+            for _, row in batch_inputs.iterrows()
+        ]
+        outputs = model.generate(batch_prompts, sampling_params)
+        results.extend([{**row, model_name: output} for row, output in zip(batch_inputs, outputs)])
+    return results
 
 
 def prepare_message(user_prompt: str, system_prompt: str, tokenizer: AutoTokenizer) -> str:
