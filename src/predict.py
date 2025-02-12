@@ -1,12 +1,19 @@
+from enum import Enum
 import pandas as pd
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from vllm import LLM, SamplingParams
+from datasets import Dataset
 
-BATCH_SIZE = 1
+
+class APIBASED_MODEL_PROVIDERS(Enum):
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    GEMINI = "gemini"
+    CLAUDE = "claude"
 
 
-def load_model_and_tokenizer(model_name: str, fast: bool) -> tuple[AutoModelForCausalLM | LLM, AutoTokenizer]:
+def load_model_and_tokenizer(model_name: str, fast: bool, tp: int) -> tuple[AutoModelForCausalLM | LLM, AutoTokenizer]:
     """Load model and tokenizer.
 
     Args:
@@ -18,9 +25,9 @@ def load_model_and_tokenizer(model_name: str, fast: bool) -> tuple[AutoModelForC
     if fast:
         model = LLM(
             model=model_name,
-            tensor_parallel_size=4,
-            dtype="auto",
-            gpu_memory_utilization=0.8
+            tensor_parallel_size=tp,
+            dtype="float32",
+            gpu_memory_utilization=0.9
         )
     else:
         model = AutoModelForCausalLM.from_pretrained(
@@ -33,36 +40,38 @@ def load_model_and_tokenizer(model_name: str, fast: bool) -> tuple[AutoModelForC
 
 
 def predict(
-    df: pd.DataFrame,
+    dataset: Dataset,
     system_prompt: str,
     model_name: str,
     fast: bool,
+    batch_size: int,
+    tp: int,
 ) -> str:
-    model, tokenizer = load_model_and_tokenizer(model_name, fast)
+    model, tokenizer = load_model_and_tokenizer(model_name, fast, tp)
     if fast:
-        results = _predict_vllm(df, system_prompt, model, model_name)
+        results = _predict_vllm(dataset, system_prompt, model, model_name, tokenizer, batch_size)
     else:
-        results = _predict_huggingface(df, system_prompt, model, model_name, tokenizer)
+        results = _predict_huggingface(dataset, system_prompt, model, model_name, tokenizer)
     return results
 
 
 def _predict_huggingface(
-    df: pd.DataFrame,
+    dataset: Dataset,
     system_prompt: str,
     model: AutoModelForCausalLM,
     model_name: str,
     tokenizer: AutoTokenizer,
 ) -> str:
     results = []
-    for _, row in df.iterrows():
-        prompt = prepare_message(row["input"] + "\n\n" + row["context"], system_prompt, tokenizer)
+    for row in dataset:
+        prompt = prepare_message(row["input"], system_prompt, tokenizer)
         token_ids = tokenizer.encode(
             prompt, add_special_tokens=False, return_tensors="pt"
         )
         with torch.no_grad():
             output_ids = model.generate(
                 token_ids.to(model.device),
-                max_new_tokens=1200,
+                max_new_tokens=2048,
                 pad_token_id=tokenizer.pad_token_id,
                 eos_token_id=tokenizer.eos_token_id,
             )
@@ -74,23 +83,29 @@ def _predict_huggingface(
 
 
 def _predict_vllm(
-    df: pd.DataFrame,
+    dataset: Dataset,
     system_prompt: str,
     model: LLM,
     model_name: str,
     tokenizer: AutoTokenizer,
-    batch_size: int = BATCH_SIZE,
+    batch_size: int,
 ) -> str:
-    sampling_params = SamplingParams(temperature=0.8)
+    sampling_params = SamplingParams(temperature=1.0, max_tokens=2048)
     results = []
-    for i in range(0, len(df), batch_size):
-        batch_inputs = df[i:i + batch_size]
+    print(dataset)
+    for i in range(0, len(dataset), batch_size):
+        batch_indices = range(i, min(i + batch_size, len(dataset)))
+        batch_data = dataset.select(batch_indices)
         batch_prompts = [
             prepare_message(row["input"], system_prompt, tokenizer)
-            for _, row in batch_inputs.iterrows()
+            for row in batch_data
         ]
         outputs = model.generate(batch_prompts, sampling_params)
-        results.extend([{**row, model_name: output} for row, output in zip(batch_inputs, outputs)])
+        for j, output in enumerate(outputs):
+            results.append({
+                **batch_data[j],
+                model_name: output.outputs[0].text
+            })
     return results
 
 
