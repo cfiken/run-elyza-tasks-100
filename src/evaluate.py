@@ -1,7 +1,7 @@
 import json
 
 from util import load_prompt
-from api_client import openai_completion
+from api_client import openai_evaluate
 
 
 def prepare_prompt(
@@ -51,7 +51,7 @@ async def gpt4eval(
         pred=pred,
         eval_aspect=eval_aspect,
     )
-    response = await openai_completion(
+    response = await openai_evaluate(
         judge_model=judge_model,
         user_prompt=prompt,
     )

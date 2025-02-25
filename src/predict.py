@@ -1,5 +1,4 @@
 from enum import Enum
-import pandas as pd
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from vllm import LLM, SamplingParams
@@ -92,7 +91,6 @@ def _predict_vllm(
 ) -> str:
     sampling_params = SamplingParams(temperature=1.0, max_tokens=2048)
     results = []
-    print(dataset)
     for i in range(0, len(dataset), batch_size):
         batch_indices = range(i, min(i + batch_size, len(dataset)))
         batch_data = dataset.select(batch_indices)
