@@ -6,7 +6,7 @@ This repository contains the code to run the ELYZA Tasks 100.
 
 To run the ELYZA Tasks 100, you can use the following command:
 
-## 1. Use repository code
+## 1. Setup environment
 
 Setup `.env`.
 
@@ -15,21 +15,36 @@ cp .env.example .env
 vi .env # set OPENAI_API_KEY
 ```
 
-Build docker image. 
-Create the output directory.
-Run with volume mount.
+Build docker image and create the output directory for saving the results.
 
 ```sh
 $ docker compose build
 $ mkdir output && chmod 777 output
+```
+
+## 2. Run the ELYZA Tasks 100
+
+```sh
 $ docker compose run --rm app poetry run python src/main.py --model abeja/ABEJA-Qwen2.5-32b-Japanese-v0.1 --judge_model gpt-4o
+```
+
+If you want to run with the api-based model, you can use the following command:
+
+```sh
+$ docker compose run --rm app poetry run python src/main.py --model openai/gpt-4o --judge_model gpt-4o --api
+```
+
+If you want to run with the local model, use `-v` to mount the model directory or change docker-compose.yml:
+
+```sh
+$ docker compose run -v /local/model/path:/app/model_dir_name --rm app poetry run python src/main.py --model ./model_dir_name --judge_model gpt-4o
 ```
 
 Then, you can find the results in `output` directory.
 
-## 2. Use dockerhub image
+## Other ways (dockerhub image)
 
-Run with dockerhub image.
+Run with dockerhub image without repository code.
 
 ```sh
 $ mkdir output && chmod 777 output

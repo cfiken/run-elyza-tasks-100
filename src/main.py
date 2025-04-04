@@ -25,7 +25,7 @@ async def inference(model_name: str, fast: bool, batch_size: int, tp: int, api: 
         results = await predict_api(dataset, DEFAULT_SYSTEM_PROMPT, model_name, batch_size)
     else:
         results = predict(dataset, DEFAULT_SYSTEM_PROMPT, model_name, fast, batch_size, tp)
-    LOGGER.info(f"Inference complete. Time: {time.time() - start / 60:.2f} minutes")
+    LOGGER.info(f"Inference complete. Time: {(time.time() - start) / 60:.2f} minutes")
     return results
 
 
@@ -41,7 +41,7 @@ async def evaluate(df: pd.DataFrame, model_name: str, judge_model: str) -> list[
         pred = row[model_name]
         score = await gpt4eval(pred, input_text, output_text, eval_aspect, judge_model)
         scores.append(score)
-    LOGGER.info(f"Evaluation complete. Time: {time.time() - start / 60:.2f} minutes")
+    LOGGER.info(f"Evaluation complete. Time: {(time.time() - start) / 60:.2f} minutes")
     return scores
 
 
